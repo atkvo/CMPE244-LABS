@@ -7,14 +7,15 @@ extern "C" {
 #include "core_cm3.h"
 #include "LPC17xx.h"
 #include "c_list.h"
+#include "printf_lib.h"
 
 /*
  * Must write your own implementation of eint.h
  */
 
 typedef struct {
-    void_func_t callback;
     eint_intr_t type;
+    void_func_t callback;
     uint8_t pin_num;
 } gpio_callback_t;
 
@@ -30,16 +31,17 @@ static bool callback_iterate(void * elm, void *statusrising, void *statusfalling
     gpio_callback_t* callback_entry = (gpio_callback_t*) elm;
     if (callback_entry->type == eint_rising_edge)
     {
-        if (*(uint32_t*)statusrising & (1 << callback_entry->pin_num))
-            callback_entry->callback();
+        if ((*(uint32_t*)statusrising) & (1 << callback_entry->pin_num))
+        {
+            (*callback_entry->callback)();
+        }
     }
     else
     {
-        if (*(uint32_t*)statusfalling & ( 1 << callback_entry->pin_num))
+        if ((*(uint32_t*)statusfalling) & ( 1 << callback_entry->pin_num))
         {
-            callback_entry->callback();
+            (*callback_entry->callback)();
         }
-
     }
     return true;
 }
@@ -58,15 +60,15 @@ void EINT3_IRQHandler(void)
     if (intstatus & P0_PENDING)
     {
         /* Loop through P0 callbacks for falling and rising */
-        while (c_list_for_each_elm(p0_rising_callbacks, callback_iterate, &p0_rising_status, &p0_falling_status, NULL)) { ; }
-        while (c_list_for_each_elm(p0_falling_callbacks, callback_iterate, &p0_rising_status, &p0_falling_status, NULL)) { ; }
+        while (!c_list_for_each_elm(p0_rising_callbacks, callback_iterate, &p0_rising_status, &p0_falling_status, NULL)) { ; }
+        while (!c_list_for_each_elm(p0_falling_callbacks, callback_iterate, &p0_rising_status, &p0_falling_status, NULL)) { ; }
     }
 
     if (intstatus & P2_PENDING)
     {
         /* Loop through P2 callbacks for falling and rising */
-        while (c_list_for_each_elm(p2_rising_callbacks, callback_iterate, &p2_rising_status, &p2_falling_status, NULL)) { ; }
-        while (c_list_for_each_elm(p2_falling_callbacks, callback_iterate, &p2_rising_status, &p2_falling_status, NULL)) { ; }
+        while (!c_list_for_each_elm(p2_rising_callbacks, callback_iterate, &p2_rising_status, &p2_falling_status, NULL)) { ; }
+        while (!c_list_for_each_elm(p2_falling_callbacks, callback_iterate, &p2_rising_status, &p2_falling_status, NULL)) { ; }
     }
 
     /* Assume all interrupts are serviced */
@@ -87,12 +89,12 @@ void eint3_enable_port0(uint8_t pin_num, eint_intr_t type, void_func_t func)
     if (type == eint_rising_edge)
     {
         intreg = (uint32_t *)&LPC_GPIOINT->IO0IntEnR;
-        callback_list = p0_rising_callbacks;
+        callback_list = &p0_rising_callbacks;
     }
     else
     {
         intreg = (uint32_t *)&LPC_GPIOINT->IO0IntEnF;
-        callback_list = p0_falling_callbacks;
+        callback_list = &p0_falling_callbacks;
     }
 
     if (*callback_list == NULL)
@@ -112,7 +114,7 @@ void eint3_enable_port0(uint8_t pin_num, eint_intr_t type, void_func_t func)
     entry->pin_num = pin_num;
 
     *intreg |= (1 << pin_num);
-    c_list_insert_elm_end(callback_list, &entry);
+    c_list_insert_elm_end(*callback_list, entry);
     NVIC_EnableIRQ(EINT3_IRQn);
 }
 
@@ -129,21 +131,32 @@ void eint3_enable_port2(uint8_t pin_num, eint_intr_t type, void_func_t func)
     if (type == eint_rising_edge)
     {
         intreg = (uint32_t *)&LPC_GPIOINT->IO2IntEnR;
-        callback_list = p2_rising_callbacks;
+        callback_list = &p2_rising_callbacks;
     }
     else
     {
         intreg = (uint32_t *)&LPC_GPIOINT->IO2IntEnF;
-        callback_list = p2_falling_callbacks;
+        callback_list = &p2_falling_callbacks;
     }
 
     if (*callback_list == NULL)
     {
         *callback_list = c_list_create();
     }
+
+    /* Must keep in memory */
+    gpio_callback_t * entry = malloc(sizeof(gpio_callback_t));
+    if (entry == NULL)
+    {
+        return;
+    }
     
+    entry->callback = func;
+    entry->type = type;
+    entry->pin_num = pin_num;
+
     *intreg |= (1 << pin_num);
-    c_list_insert_elm_end(callback_list, func);
+    c_list_insert_elm_end(*callback_list, entry);
     NVIC_EnableIRQ(EINT3_IRQn);
 }
 
