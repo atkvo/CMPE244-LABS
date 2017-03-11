@@ -28,6 +28,7 @@
 #include "FlashMemoryTask.h"
 #include "led_switch_task.hpp"
 #include "UART2Task.hpp"
+#include "eint3handlers.h"
 
 /**
  * The main() creates tasks or "threads".  See the documentation of scheduler_task class at scheduler_task.hpp
@@ -61,6 +62,7 @@ int main(void)
     scheduler_add_task(new wirelessTask(PRIORITY_CRITICAL));
     scheduler_add_task(new UART2Task(PRIORITY_MEDIUM));
     scheduler_add_task(new led_switch_task(PRIORITY_LOW, false));
+    setup_eint3_interrupts();
 
     // scheduler_add_task(new FlashMemoryTask(PRIORITY_LOW));
 
