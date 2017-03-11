@@ -18,7 +18,8 @@ void callback2(void)
 
 void setup_eint3_interrupts()
 {
-    eint3_enable_port2(3, eint_rising_edge, &callback2);
+    eint3_enable_port0(30, eint_falling_edge, &callback1);
+    eint3_enable_port2(2, eint_rising_edge, &callback2);
 }
 
 #ifdef __cplusplus
