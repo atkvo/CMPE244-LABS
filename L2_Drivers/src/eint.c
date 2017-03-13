@@ -24,8 +24,11 @@ c_list_ptr p0_falling_callbacks = NULL;
 c_list_ptr p2_rising_callbacks = NULL;
 c_list_ptr p2_falling_callbacks = NULL;
 
+/* Utility functions */
+c_list_ptr * select_callback_list(uint8_t port_num, eint_intr_t type);
+uint32_t * select_interrupt_reg(uint8_t port_num, eint_intr_t type);
+gpio_callback_t * create_callback_entry(uint8_t pin_num, eint_intr_t type, void_func_t * func);
 
-// Arg 1 contains the status register
 static bool callback_iterate(void * elm, void *statusrising, void *statusfalling, void *arg3)
 {
     gpio_callback_t* callback_entry = (gpio_callback_t*) elm;
@@ -76,7 +79,6 @@ void EINT3_IRQHandler(void)
     LPC_GPIOINT->IO2IntClr = ~(0);
 }
 
-/* Entry added LAST is checked first */
 void eint3_enable_port0(uint8_t pin_num, eint_intr_t type, void_func_t func)
 {
     if (pin_num >= 32)
@@ -84,41 +86,16 @@ void eint3_enable_port0(uint8_t pin_num, eint_intr_t type, void_func_t func)
         return;
     }
 
-    uint32_t * intreg;
-    c_list_ptr * callback_list;
-    if (type == eint_rising_edge)
-    {
-        intreg = (uint32_t *)&LPC_GPIOINT->IO0IntEnR;
-        callback_list = &p0_rising_callbacks;
-    }
-    else
-    {
-        intreg = (uint32_t *)&LPC_GPIOINT->IO0IntEnF;
-        callback_list = &p0_falling_callbacks;
-    }
+    const uint8_t port_num = 0;
+    uint32_t * intreg = select_interrupt_reg(port_num, type);
+    c_list_ptr * callback_list = select_callback_list(port_num, type);
+    gpio_callback_t * entry = create_callback_entry(pin_num, type, &func);
 
-    if (*callback_list == NULL)
-    {
-        *callback_list = c_list_create();
-    }
-
-    /* Must keep in memory */
-    gpio_callback_t * entry = malloc(sizeof(gpio_callback_t));
-    if (entry == 0)
-    {
-        return;
-    }
-
-    entry->callback = func;
-    entry->type = type;
-    entry->pin_num = pin_num;
-
-    *intreg |= (1 << pin_num);
     c_list_insert_elm_end(*callback_list, entry);
+    *intreg |= (1 << pin_num);
     NVIC_EnableIRQ(EINT3_IRQn);
 }
 
-/// @copydoc eint3_enable_port0()
 void eint3_enable_port2(uint8_t pin_num, eint_intr_t type, void_func_t func)
 {
     if (pin_num >= 32)
@@ -126,40 +103,96 @@ void eint3_enable_port2(uint8_t pin_num, eint_intr_t type, void_func_t func)
         return;
     }
 
-    uint32_t * intreg;
-    c_list_ptr * callback_list;
-    if (type == eint_rising_edge)
-    {
-        intreg = (uint32_t *)&LPC_GPIOINT->IO2IntEnR;
-        callback_list = &p2_rising_callbacks;
-    }
-    else
-    {
-        intreg = (uint32_t *)&LPC_GPIOINT->IO2IntEnF;
-        callback_list = &p2_falling_callbacks;
-    }
+    const uint8_t port_num = 2;
+    uint32_t * intreg = select_interrupt_reg(port_num, type);
+    c_list_ptr * callback_list = select_callback_list(port_num, type);
+    gpio_callback_t * entry = create_callback_entry(pin_num, type, &func);
 
-    if (*callback_list == NULL)
-    {
-        *callback_list = c_list_create();
-    }
-
-    /* Must keep in memory */
-    gpio_callback_t * entry = malloc(sizeof(gpio_callback_t));
-    if (entry == NULL)
-    {
-        return;
-    }
-    
-    entry->callback = func;
-    entry->type = type;
-    entry->pin_num = pin_num;
-
-    *intreg |= (1 << pin_num);
     c_list_insert_elm_end(*callback_list, entry);
+    *intreg |= (1 << pin_num);
     NVIC_EnableIRQ(EINT3_IRQn);
 }
 
+
+c_list_ptr * select_callback_list(uint8_t port_num, eint_intr_t type)
+{
+    c_list_ptr * cb_list = NULL;
+    switch (port_num)
+    {
+        case 0:
+            if (type == eint_rising_edge)
+            {
+                cb_list = &p0_rising_callbacks;
+            }
+            else
+            {
+                cb_list = &p0_falling_callbacks;
+            }
+            break;
+        case 2:
+            if (type == eint_rising_edge)
+            {
+                cb_list = &p2_rising_callbacks;
+            }
+            else
+            {
+                cb_list = &p2_falling_callbacks;
+            }
+            break;
+        default:
+            return NULL;
+    }
+
+    if (*cb_list == NULL)
+    {
+        *cb_list = c_list_create();
+    }
+
+    return cb_list;
+}
+
+uint32_t * select_interrupt_reg(uint8_t port_num, eint_intr_t type)
+{
+    if (type == eint_rising_edge)
+    {
+        if (port_num == 0)
+        {
+            return (uint32_t *)&LPC_GPIOINT->IO0IntEnR;
+        }
+        else if (port_num == 2)
+        {
+            return (uint32_t *)&LPC_GPIOINT->IO2IntEnR;
+        }
+    }
+    else
+    {
+        if (port_num == 0)
+        {
+            return (uint32_t *)&LPC_GPIOINT->IO0IntEnF;
+        }
+        else if (port_num == 2)
+        {
+            return (uint32_t *)&LPC_GPIOINT->IO2IntEnF;
+        }
+    }
+
+    return NULL;
+}
+
+gpio_callback_t * create_callback_entry(uint8_t pin_num, eint_intr_t type, void_func_t * func)
+{
+    /* Must keep in memory */
+    gpio_callback_t * entry = malloc(sizeof(gpio_callback_t));
+    if (entry == 0)
+    {
+        return NULL;
+    }
+
+    entry->callback = *func;
+    entry->type = type;
+    entry->pin_num = pin_num;
+    return entry;
+}
 
 
 #ifdef __cplusplus
