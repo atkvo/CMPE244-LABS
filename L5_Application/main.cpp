@@ -25,9 +25,26 @@
  */
 #include "tasks.hpp"
 #include "examples/examples.hpp"
-#include "FlashMemoryTask.h"
-#include "led_switch_task.hpp"
-#include "UART2Task.hpp"
+#include "FreeRTOS.h"
+#include "uart0_min.h"
+
+void taskA(void *p)
+{
+    while(1)
+    {
+        uart0_puts("aaaaaaaaaaaaaaaaaaaaaa");
+        vTaskDelay(1000);
+    }
+}
+
+void taskB(void *p)
+{
+    while(1)
+    {
+        uart0_puts("bbbbbbbbbbbbbbbb");
+        vTaskDelay(1000);
+    }
+}
 
 /**
  * The main() creates tasks or "threads".  See the documentation of scheduler_task class at scheduler_task.hpp
@@ -45,6 +62,15 @@
  */
 int main(void)
 {
+// #define SAME_PRIO_MODE
+#ifdef SAME_PRIO_MODE
+    xTaskCreate(taskA, "TaskA", 1024, NULL, PRIORITY_HIGH, NULL);
+    xTaskCreate(taskB, "TaskB", 1024, NULL, PRIORITY_HIGH, NULL);
+#else
+    xTaskCreate(taskA, "TaskA", 1024, NULL, PRIORITY_HIGH, NULL);
+    xTaskCreate(taskB, "TaskB", 1024, NULL, PRIORITY_MEDIUM, NULL);
+#endif
+    vTaskStartScheduler();
     /**
      * A few basic tasks for this bare-bone system :
      *      1.  Terminal task provides gateway to interact with the board through UART terminal.
@@ -55,12 +81,10 @@ int main(void)
      * such that it can save remote control codes to non-volatile memory.  IR remote
      * control codes can be learned by typing the "learn" terminal command.
      */
-    scheduler_add_task(new terminalTask(PRIORITY_HIGH));
+    // scheduler_add_task(new terminalTask(PRIORITY_HIGH));
 
     /* Consumes very little CPU, but need highest priority to handle mesh network ACKs */
-    scheduler_add_task(new wirelessTask(PRIORITY_CRITICAL));
-    scheduler_add_task(new UART2Task(PRIORITY_MEDIUM));
-    scheduler_add_task(new led_switch_task(PRIORITY_LOW, false));
+    // scheduler_add_task(new wirelessTask(PRIORITY_CRITICAL));
 
     // scheduler_add_task(new FlashMemoryTask(PRIORITY_LOW));
 
